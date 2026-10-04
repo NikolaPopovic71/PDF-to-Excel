@@ -111,7 +111,7 @@ class App(BaseTk):
         ttk.Entry(out, textvariable=self.out_dir).grid(row=1, column=1, sticky="ew", padx=6)
         ttk.Button(out, text="Izaberi…", command=self.pick_out).grid(row=1, column=2)
         out.columnconfigure(1, weight=1)
-        ttk.Checkbutton(out, text="Otvori folder sa rezultatima posle konverzije", variable=self.open_folder).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(out, text="Posle konverzije otvori rezultat (jedan fajl → Excel, više fajlova → folder)", variable=self.open_folder).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         self.btn = ttk.Button(root, text="Konvertuj sve u Excel", style="Big.TButton", command=self.run)
         self.btn.pack(fill="x")
@@ -203,6 +203,7 @@ class App(BaseTk):
     def _work(self, items):
         ok = err = 0
         folders = set()
+        produced = []
         for i, (iid, info) in enumerate(items, 1):
             dst = self._target(info["pdf"])
             self.after(0, self._set, iid, "Konvertujem…", None)
@@ -210,6 +211,7 @@ class App(BaseTk):
                 n_ev, n_rows = convert(info["pdf"], dst)
                 info["xlsx"] = dst
                 folders.add(os.path.dirname(dst))
+                produced.append(dst)
                 msg, tag = f"✓ {n_ev} disciplina, {n_rows} redova", "ok"
                 ok += 1
             except PermissionError:
@@ -219,7 +221,7 @@ class App(BaseTk):
                 msg, tag = f"✗ {e}", "err"
                 err += 1
             self.after(0, self._set, iid, msg, tag, i, len(items))
-        self.after(0, self._finish, ok, err, folders)
+        self.after(0, self._finish, ok, err, folders, produced)
 
     def _set(self, iid, msg, tag, i=None, total=None):
         if self.tree.exists(iid):
@@ -229,12 +231,16 @@ class App(BaseTk):
             self.bar["value"] = i
             self.status.set(f"Obrađeno {i} od {total}…")
 
-    def _finish(self, ok, err, folders):
+    def _finish(self, ok, err, folders, produced):
         self.running = False
         self.btn.state(["!disabled"])
         self.status.set(f"Gotovo! Uspešno: {ok}, greške: {err}. Dvoklik na red otvara Excel fajl.")
-        if self.open_folder.get() and len(folders) == 1:
-            open_path(folders.pop())
+        if self.open_folder.get() and ok:
+            if ok == 1:
+                open_path(produced[0])            # jedan fajl -> otvori Excel
+            else:
+                for f in sorted(folders)[:5]:  # više fajlova -> otvori folder(e)
+                    open_path(f)
         if err:
             messagebox.showwarning("Završeno uz greške", f"Uspešno: {ok}\nGreške: {err}\n\nDetalji su u koloni Status.")
 
